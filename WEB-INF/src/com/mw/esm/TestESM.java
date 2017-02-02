@@ -25,86 +25,119 @@ import com.microstrategy.webapi.EnumDSSXMLObjectSubTypes;
 import com.microstrategy.webapi.EnumDSSXMLSearchDomain;
 
 public class TestESM extends AbstractExternalSecurity {
-	
 	private static final String SESSION_STATE = "SESSION_STATE";
 	private static final String CLASS_NAME = "com.mw.esm.TestESM"; //$NON-NLS-1$
 
+	/**
+	 * handlesAuthenticationRequest
+	 * @param RequestKeys reqKeys
+	 * @param ContainerServices cntSvcs
+	 * @param int reason  
+	 *
+	 * reason values
+	 * 	1 = USE_MSTR_DEFAULT_LOGIN
+	 * 		NO_SESSION_FOUND
+	 * 		MISMATCHED_PREFERENCES
+	 * 		AUTHENTICATION_REQUEST
+	 *  2 = SESSION_EXPIRED
+	 *  4 = LOGIN_FIRST
+	 *  
+	 **/
 	public int handlesAuthenticationRequest(RequestKeys reqKeys, ContainerServices cntSvcs, int reason) {
-
-		
 		clearSessionState(cntSvcs);
 
-		/*
-		 * reason 1 = USE_MSTR_DEFAULT_LOGIN, NO_SESSION_FOUND,
-		 * MISMATCHED_PREFERENCES, AUTHENTICATION_REQUEST
-		 * 
-		 * reason 4 = LOGIN_FIRST
-		 * 
-		 * reason 2 = Session expired
-		 */
-		Log.logger.log(Level.INFO, "Reason: " + reason);// Authentication
-		// Request
-		if (reason == 1 || reason == 4 || reason == 2) {
-
+		//Logging information
+		Log.logger.log(Level.INFO, "Reason: " + reason);
+		
+		if(reason == 1 || reason == 4 || reason == 2) {
 			try {
-
-
-				// If exists, let in
 				boolean success = false;
+				
 				try {
-					success = obtainWebIServerSession(getLocale(cntSvcs),reqKeys, cntSvcs, "MWT7", "MWTech2016!");
-				} catch(MSTRCheckedException e){
-					success = obtainWebIServerSession(getLocale(cntSvcs),reqKeys, cntSvcs, "WIN-5E4UBCM2826", "");
+					success = obtainWebIServerSession(getLocale(cntSvcs), reqKeys, cntSvcs, "MW-MROSAS", "");
+				} catch(MSTRCheckedException e) {
+					success = obtainWebIServerSession(getLocale(cntSvcs), reqKeys, cntSvcs, "WIN-5E4UBCM2826", "");
 				}
 
-				if (success) {
+				if(success) {
 					return COLLECT_SESSION_NOW;
 				} else {
 					return USE_CUSTOM_LOGIN_PAGE;
 				}
-			} catch (Exception e) {
+			} catch(Exception e) {
 				Log.logger.log(Level.INFO, "Exception: " + e);
 			}
 
 			return USE_CUSTOM_LOGIN_PAGE;
-
 		}
+		
 		return USE_CUSTOM_LOGIN_PAGE;
 	}
 	
-	
-	private Locale getLocale(ContainerServices cntSvcs){
-		String acceptLanguage = cntSvcs.getHeaderValue("accept-language");
-		if(acceptLanguage == null || "".equals(acceptLanguage)){
-			return null;
-		}
-		List<LanguageRange> languageRanges = Locale.LanguageRange.parse(acceptLanguage);
-		if(languageRanges.size() == 0){
-			return null;
-		}
-		return Locale.forLanguageTag(languageRanges.get(0).getRange());
-	}
-
 	private void clearSessionState(ContainerServices cntSvcs) {
-		String sessionState = (String) cntSvcs.getSessionAttribute(SESSION_STATE);
+		String sessionState = (String)cntSvcs.getSessionAttribute(SESSION_STATE);
 
-		if (!StringUtils.isEmpty(sessionState)) {
+		if(!StringUtils.isEmpty(sessionState)) {
 			closeISSession(sessionState);
 			cntSvcs.setSessionAttribute(SESSION_STATE, null);
 		}
 	}
+	
+
+	public boolean obtainWebIServerSession(Locale locale, RequestKeys reqKeys, ContainerServices cntSvcs, String iServer, String password) throws MSTRCheckedException {
+		//Logging session information
+		String METHOD_NAME = "obtainWebIServerSession()"; //$NON-NLS-1$
+		Log.logger.logp(Level.INFO, CLASS_NAME, METHOD_NAME, "Obtaining Web IServer Session");
+
+		String sessionState = null;
+		String project = reqKeys.getValue(EnumWebParameters.WebParameterLoginProjectName);
+		
+		WebIServerSession iss = WebObjectsFactory.getInstance().getIServerSession();
+		iss.setServerName(iServer);
+		iss.setLogin("Administrator");
+		iss.setPassword(password);
+		iss.setServerPort(0);
+		iss.setProjectName(project);
+		iss.setApplicationType(EnumDSSXMLAuthModes.DssXmlAuthStandard);
+		setSessionLocale(iss, locale);
+		
+		MSTRSearch userSearch = new MSTRSearch(iss.getFactory().getObjectSource(), null,
+				"Administrator", false, EnumDSSXMLObjectSubTypes.DssXmlSubTypeUser,
+				EnumDSSXMLSearchDomain.DssXmlSearchDomainRepository);
+
+		WebUser webUser = (WebUser) userSearch.performSearch();
+
+		sessionState = iss.saveState(EnumWebPersistableState.MAXIMAL_STATE_INFO);
+		cntSvcs.setSessionAttribute(SESSION_STATE, sessionState);
+		
+		return true;
+	}
+	
+	private Locale getLocale(ContainerServices cntSvcs){
+		String acceptLanguage = cntSvcs.getHeaderValue("accept-language");
+		
+		if(acceptLanguage == null || "".equals(acceptLanguage)) {
+			return null;
+		}
+		
+		List<LanguageRange> languageRanges = Locale.LanguageRange.parse(acceptLanguage);
+		if(languageRanges.size() == 0){
+			return null;
+		}
+		
+		return Locale.forLanguageTag(languageRanges.get(0).getRange());
+	}
 
 	public WebIServerSession getWebIServerSession(RequestKeys reqKeys, ContainerServices cntSvcs) {
-
 		String newProject = reqKeys.getValue(EnumWebParameters.WebParameterLoginProjectName);
-
 
 		String METHOD_NAME = "getWebIServerSession()";
 		WebIServerSession userSession = null;
+		
 		try {
 			String sessionState = (String) cntSvcs.getSessionAttribute(SESSION_STATE);
 
-			if (StringUtils.isEmpty(sessionState)) {
+			if(StringUtils.isEmpty(sessionState)) {
 				Log.logger.logp(Level.SEVERE, CLASS_NAME, METHOD_NAME, "Session State was empty");
 				throw new MSTRUncheckedException("Session state was empty!");
 			}
@@ -112,20 +145,20 @@ public class TestESM extends AbstractExternalSecurity {
 			userSession = WebObjectsFactory.getInstance().getIServerSession();
 			userSession.restoreState(sessionState);
 
-			if (newProject != null && StringUtils.isNotEqual(newProject, userSession.getProjectName())) {
+			if(newProject != null && StringUtils.isNotEqual(newProject, userSession.getProjectName())) {
 				userSession.setProjectName(newProject);
 			}
+			
 			if (!userSession.isAlive()) {
 				userSession.reconnect();
 				String newState = userSession.saveState(EnumWebPersistableState.MAXIMAL_STATE_INFO);
 				cntSvcs.setSessionAttribute(SESSION_STATE, newState);
 			}
-
-		} catch (WebObjectsException e) {
+		} catch(WebObjectsException e) {
 			cntSvcs.setSessionAttribute(SESSION_STATE, null);
-
 			throw new MSTRUncheckedException("WebIServerSession.getWebIServerSession(): Unable to restore session");
 		}
+		
 		return userSession;
 	}
 
@@ -177,43 +210,9 @@ public class TestESM extends AbstractExternalSecurity {
 		return super.isRequestAuthorized(reqKeys, cntSvcs, user);
 
 	}
-
-	public boolean obtainWebIServerSession(Locale locale, RequestKeys reqKeys, ContainerServices cntSvcs, String iServer, String password) throws MSTRCheckedException {
-
-		String METHOD_NAME = "obtainWebIServerSession()"; //$NON-NLS-1$
-
-		Log.logger.logp(Level.INFO, CLASS_NAME, METHOD_NAME, "Obtaining Web IServer Session");// Log
-																								// creating
-
-		String sessionState = null;
-
-		
-		WebIServerSession iss = WebObjectsFactory.getInstance().getIServerSession();
-		iss.setServerName(iServer);
-		String project = reqKeys.getValue(EnumWebParameters.WebParameterLoginProjectName);
-		iss.setLogin("Administrator");
-		iss.setPassword(password);
-		iss.setServerPort(0);
-		iss.setProjectName(project);
-		iss.setApplicationType(EnumDSSXMLAuthModes.DssXmlAuthStandard);
-		setSessionLocale(iss, locale);
-		
-		MSTRSearch userSearch = new MSTRSearch(iss.getFactory().getObjectSource(), null,
-				"Administrator", false, EnumDSSXMLObjectSubTypes.DssXmlSubTypeUser,
-				EnumDSSXMLSearchDomain.DssXmlSearchDomainRepository);
-
-		WebUser webUser = (WebUser) userSearch.performSearch();
-
-		sessionState = iss.saveState(EnumWebPersistableState.MAXIMAL_STATE_INFO);
-		cntSvcs.setSessionAttribute(SESSION_STATE, sessionState);
-		return true;
-
-		
-	}
 	
-	private void setSessionLocale(WebIServerSession iss, Locale locale){
-		
-		if(locale != null){
+	private void setSessionLocale(WebIServerSession iss, Locale locale) {	
+		if(locale != null) {
 			iss.setLocale(locale);
 			iss.setDisplayLocale(locale);
 			iss.setMessagesLocale(locale);
@@ -222,13 +221,9 @@ public class TestESM extends AbstractExternalSecurity {
 			iss.setWarehouseDataLocale(locale);
 		}
 	}
-	
-	
 
 	public String getCustomLoginURL(String originalURL, String desiredIServer, int desiredPort, String desiredProject) {
-
 		return "";
-
 	}
 
 	public String getFailureURL(int reqType, ContainerServices cntrSvcs) {
@@ -249,7 +244,6 @@ public class TestESM extends AbstractExternalSecurity {
 	}
 
 	public boolean reconnectISSession(String sessionState, ContainerServices cntSvcs, RequestKeys reqKeys) {
-
 		// reconnect session
 		WebIServerSession iss = WebObjectsFactory.getInstance().getIServerSession();
 		iss.restoreState(sessionState);
@@ -261,10 +255,9 @@ public class TestESM extends AbstractExternalSecurity {
 			// Intelligence Servers
 			iss.setProjectName(newProject);
 		}
-
+		
 		try {
-
-			if (!iss.isAlive()) {
+			if(!iss.isAlive()) {
 				iss.reconnect();
 				String newState = iss.saveState(EnumWebPersistableState.MAXIMAL_STATE_INFO);
 				cntSvcs.setSessionAttribute(SESSION_STATE, newState);
@@ -274,7 +267,7 @@ public class TestESM extends AbstractExternalSecurity {
 			Log.logger.log(Level.INFO, "Session state cannot be reused");
 			return false;
 		}
+		
 		return true;
 	}
-
 }
